@@ -1,0 +1,52 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+
+# Package archives
+*.tgz
+
+# Misc
+.pnp.js
+.pnp.cjs
+
+# Mac
+*.DS_Store
+
+# Windows
+Thumbs.db
+
+# Database files
+*.sqlite
+
+# Next.js
+.next/
+
+# Uploaded files
+uploads/
+
+# Dependency directories
+jspm_packages/
