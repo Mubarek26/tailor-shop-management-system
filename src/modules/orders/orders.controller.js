@@ -382,6 +382,27 @@ const assignOrderToTailor = asyncHandler(async (req, res, next) => {
   });
 });
 
+const unassignOrder = asyncHandler(async (req, res, next) => {
+  const orderDoc = await Order.findOne({ _id: req.params.id, owner_id: req.user._id });
+
+  if (!orderDoc) {
+    return next(new AppError('Order not found', 404));
+  }
+
+  orderDoc.assigned_tailor_id = null;
+  await orderDoc.save();
+
+  const updatedOrder = await Order.findById(orderDoc._id)
+    .populate('customer_id', 'name phone')
+    .populate('assigned_tailor_id', 'fullName phoneNumber');
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Order unassigned from tailor',
+    data: { order: updatedOrder },
+  });
+});
+
 const deleteOrder = asyncHandler(async (req, res) => {
   const orderDoc = await Order.findOne({ _id: req.params.id, owner_id: req.user._id });
 
@@ -545,6 +566,7 @@ module.exports = {
   updateOrder,
   updateOrderStatus,
   assignOrderToTailor,
+  unassignOrder,
   deleteOrder,
   createFullOrder,
   listTailorOrders,

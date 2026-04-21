@@ -6,7 +6,6 @@ const tags = [
   { name: 'Measurements' },
   { name: 'Designs' },
   { name: 'Payments' },
-  { name: 'Tasks' },
   { name: 'Progress' },
   { name: 'Analytics' },
   { name: 'Search' },

@@ -5,6 +5,7 @@ const {
   updateOrder,
   updateOrderStatus,
   assignOrderToTailor,
+  unassignOrder,
   deleteOrder,
   createFullOrder,
   listTailorOrders,
@@ -21,6 +22,7 @@ router.post('/create-full', protect, restrictTo('owner'), createFullOrderUpload,
 router.put('/:id', protect, restrictTo('owner'), updateOrderUpload, updateOrder);
 router.patch('/:id/status', protect, restrictTo('owner'), updateOrderStatus);
 router.patch('/:id/assign-tailor', protect, restrictTo('owner'), assignOrderToTailor);
+router.patch('/:id/unassign-tailor', protect, restrictTo('owner'), unassignOrder);
 router.delete('/:id', protect, restrictTo('owner'), deleteOrder);
 
 module.exports = router;

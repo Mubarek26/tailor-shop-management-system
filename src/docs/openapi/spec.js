@@ -6,7 +6,6 @@ const ordersPaths = require('./paths/orders.swagger');
 const measurementsPaths = require('./paths/measurements.swagger');
 const designsPaths = require('./paths/designs.swagger');
 const paymentsPaths = require('./paths/payments.swagger');
-const tasksPaths = require('./paths/tasks.swagger');
 const progressPaths = require('./paths/progress.swagger');
 const analyticsPaths = require('./paths/analytics.swagger');
 const searchPaths = require('./paths/search.swagger');
@@ -22,7 +21,6 @@ module.exports = {
     ...measurementsPaths,
     ...designsPaths,
     ...paymentsPaths,
-    ...tasksPaths,
     ...progressPaths,
     ...analyticsPaths,
     ...searchPaths,

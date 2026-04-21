@@ -102,6 +102,19 @@ module.exports = {
       },
     },
   },
+  '/orders/{id}/unassign-tailor': {
+    patch: {
+      tags: ['Orders'],
+      summary: 'Unassign order from tailor by owner',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        '200': { description: 'Order unassigned from tailor successfully' },
+        '404': { description: 'Order not found' },
+        '401': { description: 'Unauthorized' }
+      },
+    },
+  },
   '/orders/tailor': {
     get: {
       tags: ['Orders'],
