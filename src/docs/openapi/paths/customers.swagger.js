@@ -2,11 +2,13 @@ module.exports = {
   '/customers': {
     get: {
       tags: ['Customers'],
-      summary: 'List customers for authenticated owner',
+      summary: 'List customers',
+      description: 'Lists customers. Owners will only see their own customers. Superadmins can see all customers across the platform or filter by the `owner_id` query parameter.',
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: 'phone', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'name', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'owner_id', in: 'query', required: false, description: 'Filter customers by owner (superadmin only)', schema: { type: 'string' } },
       ],
       responses: { '200': { description: 'Customers list' } },
     },
@@ -15,6 +17,7 @@ module.exports = {
     put: {
       tags: ['Customers'],
       summary: 'Update customer by id',
+      description: 'Updates customer details. Owners can only update their own customers. Superadmins can update any customer.',
       security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: {
@@ -48,6 +51,7 @@ module.exports = {
     delete: {
       tags: ['Customers'],
       summary: 'Delete customer by id',
+      description: 'Deletes a customer. Owners can delete their own customers, and superadmins can delete any customer. Prevented if the customer has existing orders.',
       security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
@@ -61,7 +65,8 @@ module.exports = {
   '/customers/{id}/orders': {
     get: {
       tags: ['Customers'],
-      summary: "Get customer's orders and measurements (owner only)",
+      summary: "Get customer's orders and measurements",
+      description: 'Fetches the order history for a specific customer. Superadmins can view the order history for any customer.',
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },

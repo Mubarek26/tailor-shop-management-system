@@ -1,6 +1,24 @@
 const { asyncHandler } = require('../../utils/asyncHandler');
+const mongoose = require('mongoose');
 const Order = require('../orders/orders.model');
 const Payment = require('../payments/payments.model');
+
+const getOwnerFilters = (req) => {
+  const isSuperadmin = req.user.role === 'superadmin';
+  const orderFilter = {};
+  const paymentOwnerFilter = {};
+
+  if (!isSuperadmin) {
+    orderFilter.owner_id = req.user._id;
+    paymentOwnerFilter['order.owner_id'] = req.user._id;
+  } else if (req.query.owner_id && mongoose.Types.ObjectId.isValid(req.query.owner_id)) {
+    const ownerId = new mongoose.Types.ObjectId(req.query.owner_id);
+    orderFilter.owner_id = ownerId;
+    paymentOwnerFilter['order.owner_id'] = ownerId;
+  }
+
+  return { orderFilter, paymentOwnerFilter };
+};
 
 const parseDateRange = (query) => {
   const range = {};
@@ -35,9 +53,7 @@ const getGroupByDateFormat = (groupBy) => {
 };
 
 const getSummary = asyncHandler(async (req, res) => {
-  const isSuperadmin = req.user.role === 'superadmin';
-  const orderFilter = isSuperadmin ? {} : { owner_id: req.user._id };
-  const paymentOwnerFilter = isSuperadmin ? {} : { 'order.owner_id': req.user._id };
+  const { orderFilter, paymentOwnerFilter } = getOwnerFilters(req);
 
   const [totalOrders, ordersTotalsRows, statusRows, paidRows] = await Promise.all([
     Order.countDocuments(orderFilter),
@@ -67,10 +83,11 @@ const getSummary = asyncHandler(async (req, res) => {
       },
       { $unwind: '$order' },
       { $match: paymentOwnerFilter },
+      { $unwind: '$history' },
       {
         $group: {
           _id: null,
-          paidTotal: { $sum: '$amount' },
+          paidTotal: { $sum: '$history.amount' },
         },
       },
     ]),
@@ -108,7 +125,6 @@ const getSummary = asyncHandler(async (req, res) => {
 });
 
 const getRevenue = asyncHandler(async (req, res) => {
-  const isSuperadmin = req.user.role === 'superadmin';
   const groupBy = req.query.groupBy || 'day';
 
   const allowedGroupBy = ['day', 'week', 'month'];
@@ -123,14 +139,13 @@ const getRevenue = asyncHandler(async (req, res) => {
   const paymentMatch = {};
 
   if (dateRange) {
-    paymentMatch.payment_date = dateRange;
+    paymentMatch['history.payment_date'] = dateRange;
   }
 
   const format = getGroupByDateFormat(groupBy);
-  const ownerMatch = isSuperadmin ? {} : { 'order.owner_id': req.user._id };
+  const { paymentOwnerFilter: ownerMatch } = getOwnerFilters(req);
 
   const rows = await Payment.aggregate([
-    { $match: paymentMatch },
     {
       $lookup: {
         from: 'orders',
@@ -141,25 +156,27 @@ const getRevenue = asyncHandler(async (req, res) => {
     },
     { $unwind: '$order' },
     { $match: ownerMatch },
+    { $unwind: '$history' },
+    { $match: paymentMatch },
     {
       $group: {
         _id: {
           period: {
             $dateToString: {
               format,
-              date: '$payment_date',
+              date: '$history.payment_date',
             },
           },
         },
-        paid_total: { $sum: '$amount' },
+        paid_total: { $sum: '$history.amount' },
         deposit_total: {
           $sum: {
-            $cond: [{ $eq: ['$payment_type', 'deposit'] }, '$amount', 0],
+            $cond: [{ $eq: ['$history.payment_type', 'deposit'] }, '$history.amount', 0],
           },
         },
         full_total: {
           $sum: {
-            $cond: [{ $eq: ['$payment_type', 'full'] }, '$amount', 0],
+            $cond: [{ $eq: ['$history.payment_type', 'full'] }, '$history.amount', 0],
           },
         },
         order_ids: { $addToSet: '$order_id' },
@@ -188,10 +205,9 @@ const getRevenue = asyncHandler(async (req, res) => {
 });
 
 const getOrdersStatus = asyncHandler(async (req, res) => {
-  const isSuperadmin = req.user.role === 'superadmin';
   const dateRange = parseDateRange(req.query);
 
-  const filter = isSuperadmin ? {} : { owner_id: req.user._id };
+  const { orderFilter: filter } = getOwnerFilters(req);
   if (dateRange) {
     filter.created_at = dateRange;
   }

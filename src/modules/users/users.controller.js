@@ -47,6 +47,16 @@ const createTailor = asyncHandler(async (req, res, next) => {
     return next(new AppError('Phone number already in use', 409));
   }
 
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  let targetOwnerId = req.user._id;
+
+  if (isSuperadmin) {
+    targetOwnerId = req.body.owner_id;
+    if (!targetOwnerId) {
+      return next(new AppError('owner_id is required when superadmin creates a tailor', 400));
+    }
+  }
+
   const newUser = await User.create({
     fullName,
     phoneNumber,
@@ -55,7 +65,7 @@ const createTailor = asyncHandler(async (req, res, next) => {
     role: 'tailor',
     status: 'approved',
     created_by: req.user._id,
-    owners: [req.user._id],
+    owners: [targetOwnerId],
   });
 
   newUser.password = undefined;
@@ -89,15 +99,21 @@ const findTailorByPhoneNumber = asyncHandler(async (req, res, next) => {
 });
 
 const getOwnerTailors = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'owner') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 
-  const { phoneNumber } = req.query;
+  const { phoneNumber, owner_id } = req.query;
   const filter = {
     role: 'tailor',
-    owners: req.user._id,
   };
+
+  if (!isSuperadmin) {
+    filter.owners = req.user._id;
+  } else if (owner_id) {
+    filter.owners = owner_id;
+  }
 
   if (phoneNumber) {
     filter.phoneNumber = phoneNumber;
@@ -117,11 +133,14 @@ const getOwnerTailors = asyncHandler(async (req, res, next) => {
 });
 
 const getTailorOwners = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'tailor') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'tailor' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 
-  const tailorDoc = await User.findById(req.user._id).populate(
+  const targetTailorId = isSuperadmin && req.query.tailor_id ? req.query.tailor_id : req.user._id;
+
+  const tailorDoc = await User.findById(targetTailorId).populate(
     'owners',
     '_id fullName phoneNumber email status address createdAt updatedAt'
   );

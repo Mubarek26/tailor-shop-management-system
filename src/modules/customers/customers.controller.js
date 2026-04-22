@@ -5,17 +5,24 @@ const Customer = require('./customers.model');
 const Measurement = require('../measurements/measurements.model');
 
 const listCustomers = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'owner') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 
-  const { phone, name } = req.query;
+  const { phone, name, owner_id } = req.query;
 
-  // find customer ids that have orders for this owner
-  const ownerId = req.user._id;
-  const customerIds = await Order.find({ owner_id: ownerId }).distinct('customer_id');
+  let filter = {};
 
-  const filter = { _id: { $in: customerIds } };
+  if (!isSuperadmin) {
+    const ownerId = req.user._id;
+    const customerIds = await Order.find({ owner_id: ownerId }).distinct('customer_id');
+    filter = { _id: { $in: customerIds } };
+  } else if (owner_id) {
+    const customerIds = await Order.find({ owner_id: owner_id }).distinct('customer_id');
+    filter = { _id: { $in: customerIds } };
+  }
+
   if (phone) filter.phone = phone;
   if (name) filter.name = { $regex: name, $options: 'i' };
 
@@ -29,7 +36,8 @@ const listCustomers = asyncHandler(async (req, res, next) => {
 });
 
 const getCustomerOrders = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'owner') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 
@@ -38,8 +46,13 @@ const getCustomerOrders = asyncHandler(async (req, res, next) => {
     return next(new AppError('customer id is required', 400));
   }
 
-  // Ensure this owner has orders for this customer
-  const orders = await Order.find({ customer_id: customerId, owner_id: req.user._id })
+  const query = { customer_id: customerId };
+  if (!isSuperadmin) {
+    query.owner_id = req.user._id;
+  }
+
+  // Ensure this owner has orders for this customer (if not superadmin)
+  const orders = await Order.find(query)
     .populate('customer_id', 'name phone unique_code')
     .populate('assigned_tailor_id', 'fullName phoneNumber');
 
@@ -59,7 +72,8 @@ const getCustomerOrders = asyncHandler(async (req, res, next) => {
 // createCustomer removed: customers are created implicitly when a full order is created
 
 const updateCustomer = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'owner') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 
@@ -90,7 +104,8 @@ const updateCustomer = asyncHandler(async (req, res, next) => {
 });
 
 const deleteCustomer = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'owner') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
     return next(new AppError('Unauthorized', 401));
   }
 

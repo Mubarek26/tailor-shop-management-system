@@ -267,7 +267,7 @@ const components = {
       properties: {
         _id: { type: 'string' },
         total_price: { type: 'number' },
-        prepayment: { type: 'number' },
+        deposit: { type: 'number' },
         remaining_price: { type: 'number' },
         appointment_date: { type: 'string', format: 'date-time' },
         status: { type: 'string' },

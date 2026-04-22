@@ -115,6 +115,7 @@ module.exports = {
     post: {
       tags: ['Auth'],
       summary: 'Assign a tailor to owner',
+      description: 'Assigns a tailor to a shop owner. Owners can only assign tailors to themselves (the `ownerId` field is ignored for regular owners). Superadmins MUST provide an `ownerId` to specify which shop owner gets the tailor.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -137,6 +138,7 @@ module.exports = {
     post: {
       tags: ['Auth'],
       summary: 'Assign a tailor to owner by phone',
+      description: 'Assigns a tailor using their phone number. Owners automatically assign the tailor to themselves. Superadmins MUST provide an `ownerId` to specify the target shop owner.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -145,8 +147,8 @@ module.exports = {
             schema: {
               type: 'object',
               properties: {
-                ownerPhone: { type: 'string' },
-                tailorPhone: { type: 'string' },
+                phoneNumber: { type: 'string', description: 'Phone number of the tailor' },
+                ownerId: { type: 'string', description: 'Required if superadmin is assigning' },
               },
             },
           },
@@ -159,6 +161,7 @@ module.exports = {
     get: {
       tags: ['Auth'],
       summary: 'Get current authenticated user',
+      description: 'Fetches the session profile for the currently logged-in user (Superadmin, Owner, or Tailor).',
       security: [{ bearerAuth: [] }],
       responses: { '200': { description: 'Current user profile' } },
     },

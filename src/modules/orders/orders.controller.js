@@ -7,6 +7,17 @@ const Measurement = require('../measurements/measurements.model');
 const { uploadMulterFile } = require('../../utils/cloudinaryUpload');
 const cloudinary = require('../../config/cloudinary');
 
+const getOrderActionFilter = (req, orderId) => {
+  const filter = { _id: orderId };
+  if (req.user.role === 'owner') {
+    filter.owner_id = req.user._id;
+  } else if (req.user.role === 'tailor') {
+    filter.assigned_tailor_id = req.user._id;
+  }
+  // superadmin has no role-based filter so they can access any order by _id
+  return filter;
+};
+
 const parseJsonField = (value) => {
   if (!value) {
     return value;
@@ -77,18 +88,18 @@ const getCustomerFromTopLevel = (body) => {
 
 const getOrderFromTopLevel = (body) => {
   const total_price = getFirstDefined(body, ['total_price', 'order_total_price', 'orderTotalPrice']);
-  const prepayment = getFirstDefined(body, ['prepayment', 'order_prepayment', 'orderPrepayment']);
+  const deposit = getFirstDefined(body, ['deposit', 'order_deposit', 'orderDeposit']);
   const appointment_date = getFirstDefined(body, [
     'appointment_date',
     'order_appointment_date',
     'orderAppointmentDate',
   ]);
 
-  if (!total_price && !prepayment && !appointment_date) {
+  if (!total_price && !deposit && !appointment_date) {
     return null;
   }
 
-  return { total_price, prepayment, appointment_date };
+  return { total_price, deposit, appointment_date };
 };
 
 const getMeasurementsFromTopLevel = (body) => {
@@ -177,12 +188,19 @@ const buildMeasurementUpdatePayload = (measurementsRaw) => {
 };
 
 const listOrders = asyncHandler(async (req, res, next) => {
-    // list authenticated owners list
-    if (!req.user || req.user.role !== 'owner') {
+    const isSuperadmin = req.user && req.user.role === 'superadmin';
+    if (!req.user || (req.user.role !== 'owner' && !isSuperadmin)) {
         return next(new AppError('Unauthorized', 401));
     }
 
-    const orders = await Order.find({ owner_id: req.user._id }).populate('customer_id', 'name phone',).populate('assigned_tailor_id', 'fullName phoneNumber');
+    const filter = {};
+    if (!isSuperadmin) {
+        filter.owner_id = req.user._id;
+    } else if (req.query.owner_id) {
+        filter.owner_id = req.query.owner_id;
+    }
+
+    const orders = await Order.find(filter).populate('customer_id', 'name phone',).populate('assigned_tailor_id', 'fullName phoneNumber');
     
     res.status(200).json({
         status: 'success',
@@ -201,7 +219,8 @@ const updateOrder = asyncHandler(async (req, res, next) => {
   );
   const uploadedFile = getUploadedImageFile(req);
 
-  const orderDoc = await Order.findOne({ _id: orderId, owner_id: req.user._id });
+  const filter = getOrderActionFilter(req, orderId);
+  const orderDoc = await Order.findOne(filter);
 
   if (!orderDoc) {
     return next(new AppError('Order not found', 404));
@@ -218,12 +237,12 @@ const updateOrder = asyncHandler(async (req, res, next) => {
       updateData.total_price = totalPrice;
     }
 
-    if (orderRaw.prepayment !== undefined) {
-      const prepayment = toNumber(orderRaw.prepayment);
-      if (typeof prepayment !== 'number') {
-        return next(new AppError('order.prepayment must be a number', 400));
+    if (orderRaw.deposit !== undefined) {
+      const deposit = toNumber(orderRaw.deposit);
+      if (typeof deposit !== 'number') {
+        return next(new AppError('order.deposit must be a number', 400));
       }
-      updateData.prepayment = prepayment;
+      updateData.deposit = deposit;
     }
 
     if (orderRaw.appointment_date !== undefined) {
@@ -239,10 +258,10 @@ const updateOrder = asyncHandler(async (req, res, next) => {
   }
 
   if (Object.keys(updateData).length > 0) {
-    if (updateData.total_price !== undefined || updateData.prepayment !== undefined) {
+    if (updateData.total_price !== undefined || updateData.deposit !== undefined) {
       const nextTotalPrice = updateData.total_price ?? orderDoc.total_price;
-      const nextPrepayment = updateData.prepayment ?? orderDoc.prepayment;
-      updateData.remaining_price = nextTotalPrice - nextPrepayment;
+      const nextDeposit = updateData.deposit ?? orderDoc.deposit;
+      updateData.remaining_price = nextTotalPrice - nextDeposit;
     }
 
     if (uploadedFile) {
@@ -310,8 +329,9 @@ const updateOrderStatus = asyncHandler(async (req, res, next) => {
     return next(new AppError('status must be one of: pending, in_progress, completed', 400));
   }
 
+  const filter = getOrderActionFilter(req, req.params.id);
   const orderDoc = await Order.findOneAndUpdate(
-    { _id: req.params.id, owner_id: req.user._id },
+    filter,
     { status },
     { new: true, runValidators: true }
   ).populate('customer_id', 'name phone').populate('assigned_tailor_id', 'fullName phoneNumber');
@@ -335,7 +355,8 @@ const assignOrderToTailor = asyncHandler(async (req, res, next) => {
     return next(new AppError('tailorId or tailorPhone is required', 400));
   }
 
-  const orderDoc = await Order.findOne({ _id: req.params.id, owner_id: req.user._id });
+  const filter = getOrderActionFilter(req, req.params.id);
+  const orderDoc = await Order.findOne(filter);
 
   if (!orderDoc) {
     return next(new AppError('Order not found', 404));
@@ -383,7 +404,8 @@ const assignOrderToTailor = asyncHandler(async (req, res, next) => {
 });
 
 const unassignOrder = asyncHandler(async (req, res, next) => {
-  const orderDoc = await Order.findOne({ _id: req.params.id, owner_id: req.user._id });
+  const filter = getOrderActionFilter(req, req.params.id);
+  const orderDoc = await Order.findOne(filter);
 
   if (!orderDoc) {
     return next(new AppError('Order not found', 404));
@@ -404,7 +426,8 @@ const unassignOrder = asyncHandler(async (req, res, next) => {
 });
 
 const deleteOrder = asyncHandler(async (req, res) => {
-  const orderDoc = await Order.findOne({ _id: req.params.id, owner_id: req.user._id });
+  const filter = getOrderActionFilter(req, req.params.id);
+  const orderDoc = await Order.findOne(filter);
 
   if (!orderDoc) {
     throw new AppError('Order not found', 404);
@@ -440,7 +463,7 @@ const createFullOrder = asyncHandler(async (req, res, next) => {
   const order = {
     ...orderRaw,
     total_price: toNumber(orderRaw.total_price),
-    prepayment: toNumber(orderRaw.prepayment),
+    deposit: toNumber(orderRaw.deposit),
   };
 
   const measurements = {
@@ -466,8 +489,8 @@ const createFullOrder = asyncHandler(async (req, res, next) => {
     return next(new AppError('order.total_price must be a number', 400));
   }
 
-  const prepayment = typeof order.prepayment === 'number' ? order.prepayment : 0;
-  const remainingPrice = order.total_price - prepayment;
+  const deposit = typeof order.deposit === 'number' ? order.deposit : 0;
+  const remainingPrice = order.total_price - deposit;
 
   let designImageUrl;
   let designImagePublicId;
@@ -487,11 +510,21 @@ const createFullOrder = asyncHandler(async (req, res, next) => {
     });
   }
 
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  let targetOwnerId = req.user._id;
+
+  if (isSuperadmin) {
+    targetOwnerId = req.body.owner_id || (orderRaw && orderRaw.owner_id);
+    if (!targetOwnerId) {
+      return next(new AppError('owner_id is required when superadmin creates an order', 400));
+    }
+  }
+
   const orderDoc = await Order.create({
     customer_id: customerDoc._id,
-    owner_id: req.user._id,
+    owner_id: targetOwnerId,
     total_price: order.total_price,
-    prepayment,
+    deposit,
     remaining_price: remainingPrice,
     appointment_date: order.appointment_date ? new Date(order.appointment_date) : undefined,
     status: 'pending',
@@ -526,25 +559,34 @@ const createFullOrder = asyncHandler(async (req, res, next) => {
 });
 
 const listTailorOrders = asyncHandler(async (req, res, next) => {
-  if (!req.user || req.user.role !== 'tailor') {
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  const isOwner = req.user && req.user.role === 'owner';
+  const isTailor = req.user && req.user.role === 'tailor';
+
+  if (!isSuperadmin && !isOwner && !isTailor) {
     return next(new AppError('Unauthorized', 401));
   }
 
-  const tailorId = req.user._id;
-  const { ownerId, ownerPhone, status } = req.query;
+  const { ownerId, ownerPhone, status, tailorId: queryTailorId } = req.query;
+  const filter = {};
 
-  const filter = { assigned_tailor_id: tailorId };
-
-  if (ownerId) {
-    filter.owner_id = ownerId;
+  // Handle tailor filter
+  if (isTailor) {
+    filter.assigned_tailor_id = req.user._id;
+  } else if (queryTailorId) {
+    filter.assigned_tailor_id = queryTailorId;
   }
 
-  if (ownerPhone) {
-    const ownerDoc = await User.findOne({ phoneNumber: ownerPhone, role: 'owner' });
-    if (!ownerDoc) {
-      return next(new AppError('Owner not found', 404));
+  // Handle owner filter
+  if (isOwner) {
+    filter.owner_id = req.user._id;
+  } else {
+    if (ownerId) filter.owner_id = ownerId;
+    if (ownerPhone) {
+      const ownerDoc = await User.findOne({ phoneNumber: ownerPhone, role: 'owner' });
+      if (!ownerDoc) return next(new AppError('Owner not found', 404));
+      filter.owner_id = ownerDoc._id;
     }
-    filter.owner_id = ownerDoc._id;
   }
 
   if (status) {

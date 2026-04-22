@@ -3,25 +3,51 @@ const AppError = require('../../utils/appError');
 const Payment = require('./payments.model');
 const Order = require('../orders/orders.model');
 
+const getPopulatedOrder = (order) => ({
+  _id: order._id,
+  total_price: order.total_price,
+  deposit: order.deposit,
+  remaining_price: order.remaining_price,
+  appointment_date: order.appointment_date,
+  status: order.status,
+});
+
 const getPayment = asyncHandler(async (req, res, next) => {
   const orderId = req.params.orderId;
   if (!orderId) return next(new AppError('orderId is required', 400));
 
-  const payments = await Payment.find({ order_id: orderId }).sort({ payment_date: -1 });
+  const paymentDoc = await Payment.findOne({ order_id: orderId });
+  const payments = paymentDoc ? paymentDoc.history : [];
+  
+  // Sort by date descending to match previous behavior
+  payments.sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
+
   return res.status(200).json({ status: 'success', results: payments.length, data: { payments } });
 });
 
 const createPayment = asyncHandler(async (req, res, next) => {
   const { order_id, amount, payment_type, payment_date } = req.body;
-  if (!order_id || amount == null || !payment_type) return next(new AppError('order_id, amount and payment_type are required', 400));
+  if (!order_id || amount == null || !payment_type) {
+    return next(new AppError('order_id, amount and payment_type are required', 400));
+  }
 
   const order = await Order.findById(order_id);
   if (!order) return next(new AppError('Order not found', 404));
 
-  // create payment
-  const payment = await Payment.create({ order_id, amount: Number(amount), payment_type, payment_date });
+  let paymentDoc = await Payment.findOne({ order_id });
+  if (!paymentDoc) {
+    paymentDoc = new Payment({ order_id, history: [] });
+  }
 
-  // adjust order deposit and remaining_price
+  const newHistoryItem = {
+    amount: Number(amount),
+    payment_type,
+    payment_date: payment_date || new Date(),
+  };
+
+  paymentDoc.history.push(newHistoryItem);
+  await paymentDoc.save();
+
   if (payment_type === 'full') {
     order.deposit = order.total_price;
     order.remaining_price = 0;
@@ -33,27 +59,27 @@ const createPayment = asyncHandler(async (req, res, next) => {
 
   await order.save();
 
-  await payment.populate({ path: 'order_id', select: 'total_price deposit remaining_price appointment_date status' });
+  const paymentObj = paymentDoc.history[paymentDoc.history.length - 1].toObject();
+  paymentObj.order_id = getPopulatedOrder(order);
 
-  res.status(201).json({ status: 'success', data: { payment } });
+  res.status(201).json({ status: 'success', data: { payment: paymentObj } });
 });
 
 const updatePayment = asyncHandler(async (req, res, next) => {
-  const id = req.params.id;
+  const id = req.params.id; // This is the history _id
   if (!id) return next(new AppError('Payment id is required', 400));
 
-  const payment = await Payment.findById(id);
-  if (!payment) return next(new AppError('Payment not found', 404));
+  const paymentDoc = await Payment.findOne({ 'history._id': id });
+  if (!paymentDoc) return next(new AppError('Payment not found', 404));
 
+  const historyItem = paymentDoc.history.id(id);
   const { amount, payment_type, payment_date } = req.body;
 
-  // if amount changes, adjust order accordingly
-  const order = await Order.findById(payment.order_id);
+  const order = await Order.findById(paymentDoc.order_id);
   if (!order) return next(new AppError('Related order not found', 404));
 
-    if (amount != null) {
-    const delta = Number(amount) - Number(payment.amount || 0);
-    // if payment_type is changed to 'full', prefer full semantics after update
+  if (amount != null) {
+    const delta = Number(amount) - Number(historyItem.amount || 0);
     if (payment_type === 'full') {
       order.deposit = order.total_price;
       order.remaining_price = 0;
@@ -62,23 +88,22 @@ const updatePayment = asyncHandler(async (req, res, next) => {
       const rem = (order.total_price || 0) - order.deposit;
       order.remaining_price = rem > 0 ? rem : 0;
     }
-  } else if (payment_type === 'full' && payment.payment_type !== 'full') {
-    // marking this payment as full now
+  } else if (payment_type === 'full' && historyItem.payment_type !== 'full') {
     order.deposit = order.total_price;
     order.remaining_price = 0;
   }
 
-  // apply updates to payment
-  if (amount != null) payment.amount = Number(amount);
-  if (payment_type) payment.payment_type = payment_type;
-  if (payment_date) payment.payment_date = payment_date;
+  if (amount != null) historyItem.amount = Number(amount);
+  if (payment_type) historyItem.payment_type = payment_type;
+  if (payment_date) historyItem.payment_date = payment_date;
 
-  await payment.save();
+  await paymentDoc.save();
   await order.save();
 
-  await payment.populate({ path: 'order_id', select: 'total_price deposit remaining_price appointment_date status' });
+  const paymentObj = historyItem.toObject();
+  paymentObj.order_id = getPopulatedOrder(order);
 
-  res.status(200).json({ status: 'success', data: { payment } });
+  res.status(200).json({ status: 'success', data: { payment: paymentObj } });
 });
 
 module.exports = { getPayment, createPayment, updatePayment };

@@ -2,8 +2,10 @@ module.exports = {
   '/orders': {
     get: {
       tags: ['Orders'],
-      summary: 'List owner orders',
+      summary: 'List orders',
+      description: 'Lists orders. An owner will only see their orders. A superadmin can see all orders or filter by `owner_id` query parameter.',
       security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'owner_id', in: 'query', required: false, description: 'Filter orders by owner (superadmin only)', schema: { type: 'string' } }],
       responses: { '200': { description: 'Orders list' } },
     },
   },
@@ -11,6 +13,7 @@ module.exports = {
     post: {
       tags: ['Orders'],
       summary: 'Create full order with customer, order, measurements and optional image',
+      description: 'Creates a comprehensive order. If created by an owner, it is automatically assigned to them. If created by a superadmin, they MUST provide an `owner_id` (either in the root body or inside the `order` JSON object).',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -34,7 +37,8 @@ module.exports = {
   '/orders/{id}': {
     put: {
       tags: ['Orders'],
-      summary: 'Update order by owner',
+      summary: 'Update order',
+      description: 'Updates an existing order. Owners can only update their own orders. Superadmins can update any order by its ID.',
       security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: {
@@ -66,7 +70,8 @@ module.exports = {
   '/orders/{id}/status': {
     patch: {
       tags: ['Orders'],
-      summary: 'Update order status by owner',
+      summary: 'Update order status',
+      description: 'Updates the status of an order. Owners and assigned tailors can update their respective orders. Superadmins can update any order status.',
       security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: {

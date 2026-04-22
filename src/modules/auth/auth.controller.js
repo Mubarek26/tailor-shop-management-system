@@ -266,9 +266,11 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
 // Add a controller to assign a tailor to an owner
 exports.assignTailorToOwner = asyncHandler(async (req, res, next) => {
   const { tailorId, ownerId } = req.body;
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  const targetOwnerId = isSuperadmin && ownerId ? ownerId : req.user._id;
 
   const tailor = await User.findById(tailorId);
-  const owner = await User.findById(ownerId);
+  const owner = await User.findById(targetOwnerId);
 
   if (!tailor || !owner) {
     return next(new AppError('Tailor or Owner not found', 404));
@@ -279,8 +281,8 @@ exports.assignTailorToOwner = asyncHandler(async (req, res, next) => {
   }
 
   // Add the owner to the tailor's owners array if not already present
-  if (!tailor.owners.includes(ownerId)) {
-    tailor.owners.push(ownerId);
+  if (!tailor.owners.includes(targetOwnerId)) {
+    tailor.owners.push(targetOwnerId);
     await tailor.save();
   }
 
@@ -292,14 +294,22 @@ exports.assignTailorToOwner = asyncHandler(async (req, res, next) => {
 
 // Add a controller to assign a tailor to an owner by phone number
 exports.assignTailorToOwnerByPhone = asyncHandler(async (req, res, next) => {
-  const { phoneNumber } = req.body;
-console.log('Phone number received:', phoneNumber);
+  const { phoneNumber, ownerId } = req.body;
+  const isSuperadmin = req.user && req.user.role === 'superadmin';
+  let targetOwnerId = req.user._id;
+
+  if (isSuperadmin) {
+    if (!ownerId) {
+      return next(new AppError('ownerId is required when superadmin assigns a tailor', 400));
+    }
+    targetOwnerId = ownerId;
+  }
+
   if (!phoneNumber) {
     return next(new AppError('Phone number is required', 400));
   }
 
   const tailor = await User.findOne({ phoneNumber: phoneNumber });
- console.log('Tailor found:', tailor);
   if (!tailor) {
     return next(new AppError('Tailor not found', 404));
   }
@@ -308,9 +318,14 @@ console.log('Phone number received:', phoneNumber);
     return next(new AppError('The user is not a tailor', 400));
   }
 
+  const owner = await User.findById(targetOwnerId);
+  if (!owner || owner.role !== 'owner') {
+    return next(new AppError('Owner not found or invalid', 404));
+  }
+
   // Add the authenticated owner to the tailor's owners array if not already present
-  if (!tailor.owners.includes(req.user._id)) {
-    tailor.owners.push(req.user._id);
+  if (!tailor.owners.includes(targetOwnerId)) {
+    tailor.owners.push(targetOwnerId);
     await tailor.save();
   }
 

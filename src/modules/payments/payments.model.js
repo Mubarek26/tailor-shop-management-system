@@ -1,12 +1,7 @@
 const mongoose = require('mongoose');
 
-const paymentSchema = new mongoose.Schema(
+const paymentHistorySchema = new mongoose.Schema(
   {
-    order_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Order',
-      required: true,
-    },
     amount: { type: Number, required: true },
     payment_type: {
       type: String,
@@ -16,6 +11,19 @@ const paymentSchema = new mongoose.Schema(
     payment_date: { type: Date, default: Date.now },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } }
+);
+
+const paymentSchema = new mongoose.Schema(
+  {
+    order_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      required: true,
+      unique: true,
+    },
+    history: [paymentHistorySchema],
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
 
 module.exports = mongoose.model('Payment', paymentSchema);

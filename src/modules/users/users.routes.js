@@ -14,12 +14,12 @@ const { protect, restrictTo } = require('../auth/auth.controller');
 const router = express.Router();
 
 router.get('/', listUsers);
-router.get('/tailors', protect, restrictTo('owner'), getOwnerTailors);
-router.get('/owners', protect, restrictTo('tailor'), getTailorOwners);
-router.post('/create-tailor', protect, restrictTo('owner'), createTailor);
+router.get('/tailors', protect, restrictTo('owner', 'superadmin'), getOwnerTailors);
+router.get('/owners', protect, restrictTo('tailor', 'superadmin'), getTailorOwners);
+router.post('/create-tailor', protect, restrictTo('owner', 'superadmin'), createTailor);
 router.get('/tailors/by-phone/:phoneNumber', protect, findTailorByPhoneNumber);
-router.put('/:id', updateUser);
-router.patch('/:id/status', updateUserStatus);
-router.delete('/:id', deleteUser);
+router.put('/:id', protect, restrictTo('owner', 'superadmin'), updateUser);
+router.patch('/:id/status', protect, restrictTo('owner', 'superadmin'), updateUserStatus);
+router.delete('/:id', protect, restrictTo('owner', 'superadmin'), deleteUser);
 
 module.exports = router;

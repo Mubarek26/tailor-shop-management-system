@@ -2,7 +2,8 @@ module.exports = {
   '/payments/{orderId}': {
     get: {
       tags: ['Payments'],
-      summary: 'Get payment by order id',
+      summary: 'Get payment history by order id',
+      description: 'Returns the payment history array for a specific order. The system maintains a single Payment document per order containing a timeline of all transactions.',
       parameters: [{ name: 'orderId', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         '200': {
@@ -22,8 +23,7 @@ module.exports = {
                         items: {
                           type: 'object',
                           properties: {
-                            _id: { type: 'string' },
-                            order_id: { type: 'string' },
+                            _id: { type: 'string', description: 'ID of this specific transaction in the history' },
                             amount: { type: 'number' },
                             payment_type: { type: 'string', enum: ['deposit', 'full'] },
                             payment_date: { type: 'string', format: 'date-time' },
@@ -43,7 +43,8 @@ module.exports = {
   '/payments': {
     post: {
       tags: ['Payments'],
-      summary: 'Create payment',
+      summary: 'Create payment (Add to history)',
+      description: 'Records a new payment for an order. If a payment document exists for the order, it pushes to the history array. If not, it creates the root document and the first history entry.',
       requestBody: {
         required: true,
         content: {
@@ -73,8 +74,9 @@ module.exports = {
   '/payments/{id}': {
     put: {
       tags: ['Payments'],
-      summary: 'Update payment by id',
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      summary: 'Update a specific payment transaction by its history ID',
+      description: 'Updates a specific transaction in the payment history array. The {id} parameter MUST be the `_id` of the history entry (the transaction), not the root Payment document or the Order document. It recalculates the order deposits automatically.',
+      parameters: [{ name: 'id', in: 'path', required: true, description: 'The _id of the specific history transaction item to update', schema: { type: 'string' } }],
       requestBody: {
         required: true,
         content: {

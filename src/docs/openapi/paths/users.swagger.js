@@ -2,7 +2,9 @@ module.exports = {
   '/users': {
     get: {
       tags: ['Users'],
-      summary: 'Get all users, optionally filter by role',
+      summary: 'Get all users',
+      description: 'Fetches all users in the system. Accessible by owners and superadmins.',
+      security: [{ bearerAuth: [] }],
       parameters: [
         {
           name: 'role',
@@ -17,7 +19,8 @@ module.exports = {
   '/users/create-tailor': {
     post: {
       tags: ['Users'],
-      summary: 'Owner creates tailor',
+      summary: 'Create a new tailor',
+      description: 'Creates a new tailor account. Owners will automatically have the tailor assigned to them. Superadmins MUST provide an `owner_id` in the request body to specify which shop the tailor belongs to.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -33,9 +36,17 @@ module.exports = {
   '/users/tailors': {
     get: {
       tags: ['Users'],
-      summary: 'Get tailors assigned to authenticated owner',
+      summary: 'Get tailors assigned to an owner',
+      description: 'Lists tailors. Owners will only see tailors assigned to them. Superadmins can see all tailors platform-wide or filter by passing the `owner_id` query parameter.',
       security: [{ bearerAuth: [] }],
       parameters: [
+        {
+          name: 'owner_id',
+          in: 'query',
+          required: false,
+          description: 'Filter tailors by owner (superadmin only)',
+          schema: { type: 'string' },
+        },
         {
           name: 'phoneNumber',
           in: 'query',
@@ -49,9 +60,17 @@ module.exports = {
   '/users/owners': {
     get: {
       tags: ['Users'],
-      summary: 'Get owners assigned to authenticated tailor',
+      summary: 'Get owners assigned to a tailor',
+      description: 'Lists shop owners a tailor works for. Tailors only see their own assigned owners. Superadmins can pass `tailor_id` to view owners for any specific tailor.',
       security: [{ bearerAuth: [] }],
       parameters: [
+        {
+          name: 'tailor_id',
+          in: 'query',
+          required: false,
+          description: 'Fetch owners for a specific tailor (superadmin only)',
+          schema: { type: 'string' },
+        },
         {
           name: 'phoneNumber',
           in: 'query',
@@ -96,6 +115,8 @@ module.exports = {
     put: {
       tags: ['Users'],
       summary: 'Update user by id',
+      description: 'Updates a users profile details. Superadmins can update any user.',
+      security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: {
         required: true,
@@ -126,6 +147,8 @@ module.exports = {
     delete: {
       tags: ['Users'],
       summary: 'Delete user by id',
+      description: 'Deletes a user account. Superadmins can delete any user.',
+      security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: { '200': { description: 'User deleted' } },
     },
@@ -133,7 +156,9 @@ module.exports = {
   '/users/{id}/status': {
     patch: {
       tags: ['Users'],
-      summary: 'Update owner status',
+      summary: 'Update user status',
+      description: 'Updates the approval status (pending, approved, rejected) of a user. Accessible by superadmins and owners.',
+      security: [{ bearerAuth: [] }],
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: {
         required: true,
