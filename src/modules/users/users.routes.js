@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   listUsers,
+  getUser,
   updateUser,
   deleteUser,
   updateUserStatus,
@@ -18,8 +19,9 @@ router.get('/tailors', protect, restrictTo('owner', 'superadmin'), getOwnerTailo
 router.get('/owners', protect, restrictTo('tailor', 'superadmin'), getTailorOwners);
 router.post('/create-tailor', protect, restrictTo('owner', 'superadmin'), createTailor);
 router.get('/tailors/by-phone/:phoneNumber', protect, findTailorByPhoneNumber);
-router.put('/:id', protect, restrictTo('owner', 'superadmin'), updateUser);
+router.get('/:id', protect, restrictTo('superadmin'), getUser);
+router.put('/:id', protect, restrictTo('superadmin'), updateUser);
 router.patch('/:id/status', protect, restrictTo('owner', 'superadmin'), updateUserStatus);
-router.delete('/:id', protect, restrictTo('owner', 'superadmin'), deleteUser);
+router.delete('/:id', protect, restrictTo('superadmin'), deleteUser);
 
 module.exports = router;

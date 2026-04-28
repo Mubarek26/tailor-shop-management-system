@@ -5,7 +5,13 @@ module.exports = {
       summary: 'List orders',
       description: 'Lists orders. An owner will only see their orders. A superadmin can see all orders or filter by `owner_id` query parameter.',
       security: [{ bearerAuth: [] }],
-      parameters: [{ name: 'owner_id', in: 'query', required: false, description: 'Filter orders by owner (superadmin only)', schema: { type: 'string' } }],
+      parameters: [
+        { name: 'owner_id', in: 'query', required: false, description: 'Filter orders by owner (superadmin only)', schema: { type: 'string' } },
+        { name: 'status', in: 'query', required: false, schema: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } },
+        { name: 'timeRange', in: 'query', required: false, description: 'Filter by appointment date range', schema: { type: 'string', enum: ['week', 'month', 'all'] } },
+        { name: 'page', in: 'query', required: false, schema: { type: 'integer', default: 1 } },
+        { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 10 } },
+      ],
       responses: { '200': { description: 'Orders list' } },
     },
   },
@@ -13,7 +19,7 @@ module.exports = {
     post: {
       tags: ['Orders'],
       summary: 'Create full order with customer, order, measurements and optional image',
-      description: 'Creates a comprehensive order. If created by an owner, it is automatically assigned to them. If created by a superadmin, they MUST provide an `owner_id` (either in the root body or inside the `order` JSON object).',
+      description: 'Creates a comprehensive order. This endpoint is highly flexible: it accepts nested JSON objects (`customer`, `order`, `measurements`) OR flat top-level fields (e.g., `name`, `phone`, `total_price`, `coat_length`, etc.). If created by an owner, it is automatically assigned to them. If created by a superadmin, they MUST provide an `owner_id` (either in the root body or inside the `order` JSON object).',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -129,6 +135,9 @@ module.exports = {
         { name: 'ownerId', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'ownerPhone', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'status', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'timeRange', in: 'query', required: false, schema: { type: 'string', enum: ['week', 'month', 'all'] } },
+        { name: 'page', in: 'query', required: false, schema: { type: 'integer', default: 1 } },
+        { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 10 } },
       ],
       responses: {
         '200': { description: 'Orders for tailor', content: { 'application/json': { schema: { $ref: '#/components/schemas/TailorOrdersResponse' } } } },

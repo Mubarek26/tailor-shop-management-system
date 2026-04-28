@@ -27,6 +27,29 @@ module.exports = {
       responses: { '200': { description: 'Owner request accepted' } },
     },
   },
+  '/auth/verify-email/{token}': {
+    get: {
+      tags: ['Auth'],
+      summary: 'Verify email address',
+      parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: { '200': { description: 'Email verified' }, '400': { description: 'Invalid token' } },
+    },
+  },
+  '/auth/resend-verification': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Resend verification email',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: { email: { type: 'string' } } },
+          },
+        },
+      },
+      responses: { '200': { description: 'Verification email sent' } },
+    },
+  },
   '/auth/login': {
     post: {
       tags: ['Auth'],

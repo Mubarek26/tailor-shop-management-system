@@ -4,6 +4,7 @@ const Customer = require('../customers/customers.model');
 const User = require('../users/users.model');
 const Order = require('./orders.model');
 const Measurement = require('../measurements/measurements.model');
+const Payment = require('../payments/payments.model');
 const { uploadMulterFile } = require('../../utils/cloudinaryUpload');
 const cloudinary = require('../../config/cloudinary');
 
@@ -148,6 +149,33 @@ const getUploadedImageFile = (req) => {
   return req.files.image?.[0] || req.files.file?.[0] || req.files.designImage?.[0] || null;
 };
 
+const getDateRangeFilter = (timeRange) => {
+  if (!timeRange || timeRange === 'all') return null;
+
+  const now = new Date();
+  let start, end;
+
+  if (timeRange === 'week') {
+    // Start of current week (Sunday)
+    start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    start.setHours(0, 0, 0, 0);
+
+    // End of current week (Saturday)
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  } else if (timeRange === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  if (start && end) {
+    return { appointment_date: { $gte: start, $lte: end } };
+  }
+  return null;
+};
+
 const getUpdateSections = (body) => {
   return {
     customer: getSectionFromBody(body, 'customer') || getCustomerFromTopLevel(body),
@@ -200,12 +228,59 @@ const listOrders = asyncHandler(async (req, res, next) => {
         filter.owner_id = req.query.owner_id;
     }
 
-    const orders = await Order.find(filter).populate('customer_id', 'name phone',).populate('assigned_tailor_id', 'fullName phoneNumber');
+    if (req.query.customer_id) {
+        filter.customer_id = req.query.customer_id;
+    }
+
+    if (req.query.status && req.query.status !== 'all') {
+        filter.status = req.query.status;
+    }
+
+    const dateFilter = getDateRangeFilter(req.query.timeRange || req.query.time_range);
+    if (dateFilter) {
+        Object.assign(filter, dateFilter);
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const total = await Order.countDocuments(filter);
+    const orders = await Order.find(filter)
+        .populate('customer_id', 'name phone')
+        .populate('assigned_tailor_id', 'fullName phoneNumber')
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit);
     
     res.status(200).json({
         status: 'success',
         data: {
-            orders
+            orders,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        }
+    });
+});
+
+const getOrder = asyncHandler(async (req, res, next) => {
+    const filter = getOrderActionFilter(req, req.params.id);
+    const order = await Order.findOne(filter)
+        .populate('customer_id', 'name phone unique_code')
+        .populate('assigned_tailor_id', 'fullName phoneNumber');
+
+    if (!order) {
+        return next(new AppError('Order not found', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            order
         }
     });
 });
@@ -532,6 +607,18 @@ const createFullOrder = asyncHandler(async (req, res, next) => {
     design_image_public_id: designImagePublicId,
   });
 
+  // Create initial payment record if there's a deposit
+  if (deposit > 0) {
+    await Payment.create({
+      order_id: orderDoc._id,
+      history: [{
+        amount: deposit,
+        payment_type: 'deposit',
+        payment_date: new Date(),
+      }]
+    });
+  }
+
   const measurementDoc = await Measurement.create({
     order_id: orderDoc._id,
     coat_length: measurements.coat_length,
@@ -593,18 +680,40 @@ const listTailorOrders = asyncHandler(async (req, res, next) => {
     filter.status = status;
   }
 
+  const dateFilter = getDateRangeFilter(req.query.timeRange || req.query.time_range);
+  if (dateFilter) {
+    Object.assign(filter, dateFilter);
+  }
+
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await Order.countDocuments(filter);
   const orders = await Order.find(filter)
     .populate('customer_id', 'name phone')
-    .populate('assigned_tailor_id', 'fullName phoneNumber');
+    .populate('assigned_tailor_id', 'fullName phoneNumber')
+    .sort({ created_at: -1 })
+    .skip(skip)
+    .limit(limit);
 
   res.status(200).json({
     status: 'success',
-    data: { orders },
+    data: { 
+      orders,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    },
   });
 });
 
 module.exports = {
   listOrders,
+  getOrder,
   updateOrder,
   updateOrderStatus,
   assignOrderToTailor,

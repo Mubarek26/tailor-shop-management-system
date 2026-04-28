@@ -9,6 +9,8 @@ module.exports = {
         { name: 'phone', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'name', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'owner_id', in: 'query', required: false, description: 'Filter customers by owner (superadmin only)', schema: { type: 'string' } },
+        { name: 'page', in: 'query', required: false, schema: { type: 'integer', default: 1 } },
+        { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 10 } },
       ],
       responses: { '200': { description: 'Customers list' } },
     },

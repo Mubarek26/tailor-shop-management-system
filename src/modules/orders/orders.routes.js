@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const {
   listOrders,
+  getOrder,
   updateOrder,
   updateOrderStatus,
   assignOrderToTailor,
@@ -18,6 +19,7 @@ const updateOrderUpload = upload.any();
 
 router.get('/', protect, restrictTo('owner', 'superadmin'), listOrders);
 router.get('/tailor', protect, restrictTo('tailor', 'superadmin', 'owner'), listTailorOrders);
+router.get('/:id', protect, restrictTo('owner', 'superadmin', 'tailor'), getOrder);
 router.post('/create-full', protect, restrictTo('owner', 'superadmin'), createFullOrderUpload, createFullOrder);
 router.put('/:id', protect, restrictTo('owner', 'superadmin'), updateOrderUpload, updateOrder);
 router.patch('/:id/status', protect, restrictTo('owner', 'superadmin', 'tailor'), updateOrderStatus);

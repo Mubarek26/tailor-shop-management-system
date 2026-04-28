@@ -1,6 +1,8 @@
 const express = require('express');
 const {
 	requestOwnerAccess,
+	verifyEmail,
+	resendVerification,
 	login,
 	logout,
 	protect,
@@ -12,9 +14,13 @@ const {
 	assignTailorToOwnerByPhone,
 } = require('./auth.controller');
 
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
 
-router.post('/owner-request', requestOwnerAccess);
+router.post('/owner-request', upload.single('photo'), requestOwnerAccess);
+router.get('/verify-email/:token', verifyEmail);
+router.post('/resend-verification', resendVerification);
 router.post('/login', login);
 router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);

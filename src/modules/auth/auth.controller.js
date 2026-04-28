@@ -41,6 +41,8 @@ const createSendToken = async (user, statusCode, res) => {
   });
 };
 exports.requestOwnerAccess = catchAsync(async (req, res, next) => {
+  console.log("requestOwnerAccess -> req.body:", req.body);
+  console.log("requestOwnerAccess -> req.file:", req.file);
   let photoUrl = req.body.photo;
   if (req.file) {
     const upload = await uploadMulterFile(req.file, { folder: "users" });
@@ -56,10 +58,202 @@ exports.requestOwnerAccess = catchAsync(async (req, res, next) => {
     photo: photoUrl || "default.jpg", // Default photo if not provided
     phoneNumber: req.body.phoneNumber, // Add phone number field
     address: req.body.address,
-    // passwordChangedAt: req.body.passwordChangedAt || Date.now(),
     role: normalizedRole,
+    status: 'pending',
+    isEmailVerified: false,
   });
-  return createSendToken(newUser, 200, res);
+
+  const verificationToken = newUser.createEmailVerificationToken();
+  await newUser.save({ validateBeforeSave: false });
+
+  const verificationURL = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verify your email</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .logo { font-size: 28px; font-weight: bold; color: #1a1a1a; text-decoration: none; }
+        .content { background: #ffffff; border-radius: 16px; padding: 40px; border: 1px solid #eaeaea; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .title { font-size: 24px; font-weight: 800; margin-bottom: 16px; color: #000; }
+        .text { font-size: 16px; color: #666; margin-bottom: 32px; }
+        .button { display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; transition: opacity 0.2s; }
+        .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #999; }
+        .steps { margin-top: 32px; border-top: 1px solid #eee; pt: 32px; }
+        .step { margin-bottom: 16px; }
+        .step-title { font-weight: bold; color: #333; display: block; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <a href="#" class="logo">Tailor Pro</a>
+        </div>
+        <div class="content">
+          <h1 class="title">Verify your email address</h1>
+          <p class="text">Welcome to Tailor Pro! We're excited to have you join our network of elite tailor shops. To finalize your application, please verify your email address below.</p>
+          
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${verificationURL}" class="button">Verify Email Address</a>
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <span class="step-title">What happens next?</span>
+              <span class="text">Once verified, our team will review your application. This typically takes 24-48 hours. You'll receive another email as soon as your account is approved.</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <p>&copy; 2026 Tailor Pro Management System. All rights reserved.</p>
+          <p>If you didn't create an account, you can safely ignore this email.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await sendEmail({
+      email: newUser.email,
+      subject: "Verify your email - Tailor Pro",
+      message: `Please verify your email by clicking here: ${verificationURL}`,
+      html,
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Application submitted! Please check your email to verify your account.",
+    });
+  } catch (err) {
+    console.error("Error sending verification email:", err);
+    newUser.emailVerificationToken = undefined;
+    await newUser.save({ validateBeforeSave: false });
+    return next(new AppError("There was an error sending the verification email. Please contact support.", 500));
+  }
+});
+
+exports.verifyEmail = catchAsync(async (req, res, next) => {
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  const user = await User.findOne({
+    emailVerificationToken: hashedToken,
+  });
+
+  if (!user) {
+    return next(new AppError("Token is invalid or has expired", 400));
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationToken = undefined;
+  await user.save({ validateBeforeSave: false });
+
+  res.status(200).json({
+    status: "success",
+    message: "Email verified successfully! Your account is now under review by our admin.",
+  });
+});
+
+exports.resendVerification = catchAsync(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return next(new AppError("Please provide an email address.", 400));
+  }
+
+  const user = await User.findOne({ email, role: 'owner' });
+
+  if (!user) {
+    return next(new AppError("No pending application found with this email.", 404));
+  }
+
+  if (user.isEmailVerified) {
+    return next(new AppError("This email is already verified.", 400));
+  }
+
+  const verificationToken = user.createEmailVerificationToken();
+  await user.save({ validateBeforeSave: false });
+
+  const verificationURL = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verify your email</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .logo { font-size: 28px; font-weight: bold; color: #1a1a1a; text-decoration: none; }
+        .content { background: #ffffff; border-radius: 16px; padding: 40px; border: 1px solid #eaeaea; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .title { font-size: 24px; font-weight: 800; margin-bottom: 16px; color: #000; }
+        .text { font-size: 16px; color: #666; margin-bottom: 32px; }
+        .button { display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; transition: opacity 0.2s; }
+        .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #999; }
+        .steps { margin-top: 32px; border-top: 1px solid #eee; pt: 32px; }
+        .step { margin-bottom: 16px; }
+        .step-title { font-weight: bold; color: #333; display: block; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <a href="#" class="logo">Tailor Pro</a>
+        </div>
+        <div class="content">
+          <h1 class="title">Verify your email address</h1>
+          <p class="text">Welcome back! To finalize your application, please verify your email address below.</p>
+          
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${verificationURL}" class="button">Verify Email Address</a>
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <span class="step-title">What happens next?</span>
+              <span class="text">Once verified, our team will review your application. This typically takes 24-48 hours. You'll receive another email as soon as your account is approved.</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <p>&copy; 2026 Tailor Pro Management System. All rights reserved.</p>
+          <p>If you didn't create an account, you can safely ignore this email.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: "Verify your email - Tailor Pro",
+      message: `Please verify your email by clicking here: ${verificationURL}`,
+      html,
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Verification email resent successfully!",
+    });
+  } catch (err) {
+    console.error("Error resending verification email:", err);
+    user.emailVerificationToken = undefined;
+    await user.save({ validateBeforeSave: false });
+    return next(new AppError("There was an error sending the email. Try again later!", 500));
+  }
 });
 
 exports.login = catchAsync(async (req, res, next) => {
@@ -89,6 +283,15 @@ exports.login = catchAsync(async (req, res, next) => {
 
   if (!(await user.correctPassword(password, user.password))) {
     return next(new AppError("Incorrect credentials", 401));
+  }
+
+  if (user.role === 'owner') {
+    if (!user.isEmailVerified) {
+      return next(new AppError("Please verify your email address before logging in.", 401));
+    }
+    if (user.status !== 'approved') {
+      return next(new AppError("Your account is under review. You will be able to log in once approved by the admin.", 401));
+    }
   }
 
   return createSendToken(user, 200, res);
@@ -185,14 +388,61 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
   await user.save({ validateBeforeSave: false });
   //send it to user's email
   const resetURL = `${process.env.FRONTEND_URL}/resetPassword/${resetToken}`;
-  const message =
-    `Forgot your password? Please use the link below to set a new password and confirm it:\n\n` +
-    `${resetURL}\n\nIf you didn't forget your password, please ignore this email!`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Reset your password</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .logo { font-size: 28px; font-weight: bold; color: #1a1a1a; text-decoration: none; }
+        .content { background: #ffffff; border-radius: 16px; padding: 40px; border: 1px solid #eaeaea; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .title { font-size: 24px; font-weight: 800; margin-bottom: 16px; color: #000; }
+        .text { font-size: 16px; color: #666; margin-bottom: 32px; }
+        .button { display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; transition: opacity 0.2s; }
+        .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #999; }
+        .warning { margin-top: 32px; padding-top: 32px; border-top: 1px solid #eee; font-size: 13px; color: #999; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <a href="#" class="logo">Tailor Pro</a>
+        </div>
+        <div class="content">
+          <h1 class="title">Reset your password</h1>
+          <p class="text">We received a request to reset the password for your Tailor Pro account. Click the button below to choose a new password. This link is valid for 10 minutes.</p>
+          
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${resetURL}" class="button">Reset Password</a>
+          </div>
+
+          <p class="text">If you didn't make this request, you can safely ignore this email. Your password will remain unchanged.</p>
+
+          <div class="warning">
+            If you're having trouble clicking the "Reset Password" button, copy and paste the URL below into your web browser:<br>
+            <a href="${resetURL}" style="color: #666;">${resetURL}</a>
+          </div>
+        </div>
+        <div class="footer">
+          <p>&copy; 2026 Tailor Pro Management System. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
   try {
     await sendEmail({
       email: user.email,
-      subject: "Your password reset token (valid for 10 minutes)",
-      message,
+      subject: "Password Reset Request - Tailor Pro",
+      message: `Reset your password here: ${resetURL}`,
+      html,
     });
     return res.status(200).json({
       status: "success",

@@ -26,12 +26,28 @@ const listCustomers = asyncHandler(async (req, res, next) => {
   if (phone) filter.phone = phone;
   if (name) filter.name = { $regex: name, $options: 'i' };
 
-  const customers = await Customer.find(filter).select('name phone unique_code created_at updated_at');
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const total = await Customer.countDocuments(filter);
+  const customers = await Customer.find(filter)
+    .select('name phone unique_code created_at updated_at')
+    .sort({ created_at: -1 })
+    .skip(skip)
+    .limit(limit);
 
   res.status(200).json({
     status: 'success',
-    results: customers.length,
-    data: { customers },
+    data: { 
+      customers,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    },
   });
 });
 

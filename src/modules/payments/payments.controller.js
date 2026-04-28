@@ -48,19 +48,31 @@ const createPayment = asyncHandler(async (req, res, next) => {
   paymentDoc.history.push(newHistoryItem);
   await paymentDoc.save();
 
+  const currentDeposit = Number(order.deposit || 0);
+  const currentTotal = Number(order.total_price || 0);
+  const paymentAmount = Number(amount);
+
+  let newDeposit, newRemaining;
+
   if (payment_type === 'full') {
-    order.deposit = order.total_price;
-    order.remaining_price = 0;
+    newDeposit = currentTotal;
+    newRemaining = 0;
   } else {
-    order.deposit = (order.deposit || 0) + Number(amount);
-    const rem = (order.total_price || 0) - order.deposit;
-    order.remaining_price = rem > 0 ? rem : 0;
+    newDeposit = currentDeposit + paymentAmount;
+    newRemaining = Math.max(0, currentTotal - newDeposit);
   }
 
-  await order.save();
+  // Update order using findOneAndUpdate to ensure atomic update and avoid document state issues
+  const updatedOrder = await Order.findByIdAndUpdate(
+    order_id,
+    { deposit: newDeposit, remaining_price: newRemaining },
+    { new: true, runValidators: true }
+  );
+
+  if (!updatedOrder) return next(new AppError('Failed to update order balance', 500));
 
   const paymentObj = paymentDoc.history[paymentDoc.history.length - 1].toObject();
-  paymentObj.order_id = getPopulatedOrder(order);
+  paymentObj.order_id = getPopulatedOrder(updatedOrder);
 
   res.status(201).json({ status: 'success', data: { payment: paymentObj } });
 });
@@ -78,30 +90,36 @@ const updatePayment = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(paymentDoc.order_id);
   if (!order) return next(new AppError('Related order not found', 404));
 
-  if (amount != null) {
-    const delta = Number(amount) - Number(historyItem.amount || 0);
-    if (payment_type === 'full') {
-      order.deposit = order.total_price;
-      order.remaining_price = 0;
-    } else {
-      order.deposit = (order.deposit || 0) + delta;
-      const rem = (order.total_price || 0) - order.deposit;
-      order.remaining_price = rem > 0 ? rem : 0;
-    }
-  } else if (payment_type === 'full' && historyItem.payment_type !== 'full') {
-    order.deposit = order.total_price;
-    order.remaining_price = 0;
+  const currentTotal = Number(order.total_price || 0);
+  const oldAmount = Number(historyItem.amount || 0);
+  const newAmount = amount !== undefined ? Number(amount) : oldAmount;
+  const isFull = payment_type === 'full';
+
+  let nextDeposit;
+  if (isFull) {
+    nextDeposit = currentTotal;
+  } else {
+    const delta = newAmount - oldAmount;
+    nextDeposit = Number(order.deposit || 0) + delta;
   }
+  
+  const nextRemaining = Math.max(0, currentTotal - nextDeposit);
+
+  // Update order balance
+  const updatedOrder = await Order.findByIdAndUpdate(
+    order._id,
+    { deposit: nextDeposit, remaining_price: nextRemaining },
+    { new: true, runValidators: true }
+  );
 
   if (amount != null) historyItem.amount = Number(amount);
   if (payment_type) historyItem.payment_type = payment_type;
   if (payment_date) historyItem.payment_date = payment_date;
 
   await paymentDoc.save();
-  await order.save();
 
   const paymentObj = historyItem.toObject();
-  paymentObj.order_id = getPopulatedOrder(order);
+  paymentObj.order_id = getPopulatedOrder(updatedOrder);
 
   res.status(200).json({ status: 'success', data: { payment: paymentObj } });
 });
