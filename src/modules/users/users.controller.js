@@ -2,6 +2,7 @@ const { asyncHandler } = require('../../utils/asyncHandler');
 const User = require('./users.model');
 const AppError = require('../../utils/appError');
 const sendEmail = require('../../utils/email');
+const { uploadMulterFile } = require('../../utils/cloudinaryUpload');
 
 const listUsers = asyncHandler(async (req, res, next) => {
   const { role } = req.query;
@@ -321,6 +322,39 @@ const updateUserStatus = asyncHandler(async (req, res, next) => {
   res.status(200).json({ status: 'success', data: { user } });
 });
 
+const updateMe = asyncHandler(async (req, res, next) => {
+  const { fullName, email, address } = req.body;
+  const updateData = {};
+  const isTailor = req.user.role === 'tailor';
+  
+  // Tailors are not allowed to change their name or email
+  if (!isTailor) {
+    if (fullName) updateData.fullName = fullName;
+    if (email) updateData.email = email;
+  }
+  
+  if (address) updateData.address = address;
+
+  if (req.file) {
+    const uploaded = await uploadMulterFile(req.file, { folder: 'users' });
+    updateData.photo = uploaded?.secure_url;
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user._id,
+    updateData,
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: { user: updatedUser },
+  });
+});
+
 module.exports = {
   listUsers,
   getUser,
@@ -331,4 +365,5 @@ module.exports = {
   findTailorByPhoneNumber,
   getOwnerTailors,
   getTailorOwners,
+  updateMe,
 };

@@ -9,12 +9,17 @@ const {
   findTailorByPhoneNumber,
   getOwnerTailors,
   getTailorOwners,
+  updateMe,
 } = require('./users.controller');
 const { protect, restrictTo } = require('../auth/auth.controller');
+
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
 router.get('/', listUsers);
+router.patch('/me', protect, upload.single('photo'), updateMe);
 router.get('/tailors', protect, restrictTo('owner', 'superadmin'), getOwnerTailors);
 router.get('/owners', protect, restrictTo('tailor', 'superadmin'), getTailorOwners);
 router.post('/create-tailor', protect, restrictTo('owner', 'superadmin'), createTailor);

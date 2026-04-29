@@ -18,6 +18,37 @@ module.exports = {
       responses: { '200': { description: 'Users list' } },
     },
   },
+  '/users/me': {
+    patch: {
+      tags: ['Users'],
+      summary: 'Update current user profile',
+      description: 'Updates the profile details of the currently authenticated user, including full name, email, address, and profile photo.',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              properties: {
+                fullName: { type: 'string', description: 'Updated full name' },
+                email: { type: 'string', format: 'email', description: 'Updated email address' },
+                address: { type: 'string', description: 'Updated physical address' },
+                photo: { type: 'string', format: 'binary', description: 'Profile picture file' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description: 'Profile updated successfully',
+          content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string' }, data: { type: 'object' } } } } },
+        },
+        '401': { description: 'Unauthorized' },
+      },
+    },
+  },
   '/users/create-tailor': {
     post: {
       tags: ['Users'],
