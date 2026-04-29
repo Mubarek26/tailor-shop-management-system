@@ -247,7 +247,7 @@ const listOrders = asyncHandler(async (req, res, next) => {
 
     const total = await Order.countDocuments(filter);
     const orders = await Order.find(filter)
-        .populate('customer_id', 'name phone')
+        .populate('customer_id', 'name phone unique_code')
         .populate('assigned_tailor_id', 'fullName phoneNumber')
         .sort({ created_at: -1 })
         .skip(skip)
@@ -691,7 +691,7 @@ const listTailorOrders = asyncHandler(async (req, res, next) => {
 
   const total = await Order.countDocuments(filter);
   const orders = await Order.find(filter)
-    .populate('customer_id', 'name phone')
+    .populate('customer_id', 'name phone unique_code')
     .populate('assigned_tailor_id', 'fullName phoneNumber')
     .sort({ created_at: -1 })
     .skip(skip)
